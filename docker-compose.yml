@@ -1,0 +1,80 @@
+version: "3"
+networks:
+  main:
+    driver: bridge
+services:
+  nats:
+    container_name: nats
+    image: "nats:2.8.0"
+    ports:
+      - "8222:8222"
+      - "4222:4222"
+    networks:
+      - main
+  redis:
+    image: "redis:7"
+    ports:
+      - "6379:6379"
+    volumes:
+      - "./ep-service/redis_data:/data"
+    networks:
+      - main
+  mongodb_ep:
+    image: mongo
+    ports:
+      - "27021:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=orders
+    volumes:
+      - ./mongo-init:/docker-entrypoint-initdb.d
+      - ./ep-service/db_data:/data/db
+    networks:
+      - main
+  mongodb_cron:
+    image: mongo
+    ports:
+      - "27022:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=orders
+    volumes:
+      - ./mongo-init:/docker-entrypoint-initdb.d
+      - ./cron-service/db_data:/data/db
+    networks:
+      - main
+  ep_service:
+    build:
+      context: "./ep-service"
+      dockerfile: "./Dockerfile"
+    depends_on:
+      - nats
+      - mongodb_ep
+      - redis
+    environment:
+      - NODE_ENV:${NODE_ENV}
+      - NATS_URI=nats://nats:4222
+      - DB_NAME=orders
+      - DB_URI=mongodb://orders_user:orders_user123@mongodb_ep:27017?authSource=orders
+      - REDIS_URI=redis://redis:6379
+    ports:
+      - "3000:3000"
+    networks:
+      - main
+  cron-service:
+    build:
+      context: "./cron-service"
+      dockerfile: "./Dockerfile"
+    depends_on:
+      - nats
+      - mongodb_cron
+      - ep_service
+    environment:
+      - NODE_ENV:${NODE_ENV}
+      - NATS_URI=nats://nats:4222
+      - DB_NAME=orders
+      - DB_URI=mongodb://orders_user:orders_user123@mongodb_cron:27017?authSource=orders
+    networks:
+      - main

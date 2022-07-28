@@ -1,0 +1,6 @@
+.idea
+node_modules
+dist
+db_data
+redis_data
+.env
